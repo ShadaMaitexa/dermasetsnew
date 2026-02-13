@@ -5,3 +5,5 @@ pillow
 firebase-admin
 flask-cors
 gunicorn
+opencv-python
+numpy
