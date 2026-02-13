@@ -4,3 +4,4 @@ torchvision
 pillow
 firebase-admin
 flask-cors
+gunicorn
