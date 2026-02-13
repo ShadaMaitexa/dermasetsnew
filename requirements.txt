@@ -1,5 +1,6 @@
-Flask
+flask
 torch
 torchvision
-Pillow
-numpy
+pillow
+firebase-admin
+flask-cors
