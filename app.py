@@ -7,6 +7,10 @@ import os
 import logging
 import cv2
 import numpy as np
+import gc
+
+# Memory optimization: limit torch threads
+torch.set_num_threads(1)
 
 try:
     import firebase_admin
@@ -62,7 +66,8 @@ transform = transforms.Compose([
 # ================================
 # Load Model
 # ================================
-model = models.resnet50(pretrained=False)
+# Using weights=None instead of deprecated pretrained=False
+model = models.resnet50(weights=None)
 num_ftrs = model.fc.in_features
 model.fc = nn.Linear(num_ftrs, num_classes)
 
@@ -70,9 +75,11 @@ model_path = os.path.join(BASE_DIR, 'models', 'skin_disease_model.pth')
 
 if os.path.exists(model_path):
     try:
-        model.load_state_dict(
-            torch.load(model_path, map_location=torch.device('cpu'))
-        )
+        # Load model to CPU explicitly
+        state_dict = torch.load(model_path, map_location=torch.device('cpu'))
+        model.load_state_dict(state_dict)
+        del state_dict # Free memory
+        gc.collect()   # Force garbage collection
         print("Model loaded successfully.")
     except Exception as e:
         print(f"Model load error: {e}")
