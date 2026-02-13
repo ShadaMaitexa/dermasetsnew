@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, redirect
+from flask import Flask, request, jsonify, render_template, make_response
 import torch
 import torch.nn as nn
 from torchvision import transforms, models
@@ -25,8 +25,17 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 app = Flask(__name__)
 
-# ROBUST CORS: This fixes the "Failed to Fetch" error in Flutter Web
+# 1. ROBUST CORS: This is the first layer of protection
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+
+# 2. NUCLEAR CORS: This forces headers on every response, fixing Chrome blocks
+@app.after_request
+def add_cors_headers(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept,X-Requested-With')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    response.headers.add('Access-Control-Max-Age', '3600')
+    return response
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -58,19 +67,13 @@ CONFIDENCE_THRESHOLD = 75
 transform = transforms.Compose([
     transforms.Resize((img_width, img_height)),
     transforms.ToTensor(),
-    transforms.Normalize(
-        [0.485, 0.456, 0.406],
-        [0.229, 0.224, 0.225]
-    )
+    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
 ])
 
-# ================================
 # Load Model
-# ================================
 model = models.resnet50(weights=None)
 num_ftrs = model.fc.in_features
 model.fc = nn.Linear(num_ftrs, num_classes)
-
 model_path = os.path.join(BASE_DIR, 'models', 'skin_disease_model.pth')
 
 if os.path.exists(model_path):
@@ -84,55 +87,18 @@ if os.path.exists(model_path):
         print(f"Model load error: {e}")
 else:
     print("Model file not found. Using untrained model.")
-
 model.eval()
 
 # ================================
-# Class Labels & Details
+# Labels & Details
 # ================================
 class_labels = {0: 'Acne', 1: 'Hairloss', 2: 'Nail Fungus', 3: 'Normal', 4: 'Skin Allergy'}
-
 DISEASE_DETAILS = {
-    'Acne': {
-        'description': 'Acne is caused by clogged pores and oil buildup.',
-        'steps': [
-            {'title': 'Gentle Cleansing', 'description': 'Wash face twice daily.', 'icon': 'wash'},
-            {'title': 'Topical Treatment', 'description': 'Use salicylic acid products.', 'icon': 'science'},
-            {'title': 'Avoid Touching', 'description': 'Do not pick pimples.', 'icon': 'do_not_disturb_on'}
-        ]
-    },
-    'Hairloss': {
-        'description': 'Hair loss due to genetics or nutrition.',
-        'steps': [
-            {'title': 'Nutrition', 'description': 'Increase iron and biotin.', 'icon': 'restaurant'},
-            {'title': 'Massage', 'description': 'Improve blood circulation.', 'icon': 'touch_app'},
-            {'title': 'Consult Doctor', 'description': 'Visit dermatologist.', 'icon': 'medical_services'}
-        ]
-    },
-    'Nail Fungus': {
-        'description': 'Fungal infection affecting nails.',
-        'steps': [
-            {'title': 'Keep Dry', 'description': 'Avoid moisture.', 'icon': 'opacity'},
-            {'title': 'Antifungal Cream', 'description': 'Apply medication.', 'icon': 'medical_information'},
-            {'title': 'Trim Nails', 'description': 'Keep nails short.', 'icon': 'content_cut'}
-        ]
-    },
-    'Skin Allergy': {
-        'description': 'Skin reaction to allergens.',
-        'steps': [
-            {'title': 'Identify Trigger', 'description': 'Find allergen.', 'icon': 'search'},
-            {'title': 'Cool Compress', 'description': 'Reduce irritation.', 'icon': 'ac_unit'},
-            {'title': 'Medication', 'description': 'Use antihistamines.', 'icon': 'medication'}
-        ]
-    },
-    'Normal': {
-        'description': 'Skin appears healthy.',
-        'steps': [
-            {'title': 'Hydrate', 'description': 'Drink water.', 'icon': 'water_drop'},
-            {'title': 'Sun Protection', 'description': 'Use sunscreen.', 'icon': 'wb_sunny'},
-            {'title': 'Maintain Routine', 'description': 'Continue skincare.', 'icon': 'shield'}
-        ]
-    }
+    'Acne': {'description': 'Acne is caused by clogged pores and oil buildup.', 'steps': [{'title': 'Gentle Cleansing', 'description': 'Wash face twice daily.', 'icon': 'wash'}, {'title': 'Topical Treatment', 'description': 'Use salicylic acid products.', 'icon': 'science'}, {'title': 'Avoid Touching', 'description': 'Do not pick pimples.', 'icon': 'do_not_disturb_on'}]},
+    'Hairloss': {'description': 'Hair loss due to genetics or nutrition.', 'steps': [{'title': 'Nutrition', 'description': 'Increase iron and biotin.', 'icon': 'restaurant'}, {'title': 'Massage', 'description': 'Improve blood circulation.', 'icon': 'touch_app'}, {'title': 'Consult Doctor', 'description': 'Visit dermatologist.', 'icon': 'medical_services'}]},
+    'Nail Fungus': {'description': 'Fungal infection affecting nails.', 'steps': [{'title': 'Keep Dry', 'description': 'Avoid moisture.', 'icon': 'opacity'}, {'title': 'Antifungal Cream', 'description': 'Apply medication.', 'icon': 'medical_information'}, {'title': 'Trim Nails', 'description': 'Keep nails short.', 'icon': 'content_cut'}]},
+    'Skin Allergy': {'description': 'Skin reaction to allergens.', 'steps': [{'title': 'Identify Trigger', 'description': 'Find allergen.', 'icon': 'search'}, {'title': 'Cool Compress', 'description': 'Reduce irritation.', 'icon': 'ac_unit'}, {'title': 'Medication', 'description': 'Use antihistamines.', 'icon': 'medication'}]},
+    'Normal': {'description': 'Skin appears healthy.', 'steps': [{'title': 'Hydrate', 'description': 'Drink water.', 'icon': 'water_drop'}, {'title': 'Sun Protection', 'description': 'Use sunscreen.', 'icon': 'wb_sunny'}, {'title': 'Maintain Routine', 'description': 'Continue skincare.', 'icon': 'shield'}]}
 }
 
 # ================================
@@ -157,27 +123,21 @@ def predict_skin_disease(image_path):
         outputs = model(img)
         probabilities = torch.nn.functional.softmax(outputs, dim=1)
         confidence, predicted = torch.max(probabilities, 1)
-    confidence_value = confidence.item() * 100
-    if confidence_value < CONFIDENCE_THRESHOLD:
-        return "Uncertain Prediction", confidence_value
-    return class_labels.get(predicted.item(), "Unknown"), confidence_value
+    return class_labels.get(predicted.item(), "Unknown"), confidence.item() * 100
 
 # ================================
-# WEB & API ROUTES
+# MAIN HANDLER
 # ================================
 
 @app.route('/', methods=['GET', 'POST', 'OPTIONS'])
 def handle_root():
-    # CORS Preflight handler
+    # Explicitly handle CORS preflight
     if request.method == 'OPTIONS':
         return '', 204
 
     if request.method == 'POST':
-        # Smart detection: Is it Flutter (API) or Browser (Web Form)?
-        is_api_request = (
-            request.form.get('uid') is not None or 
-            'application/json' in request.headers.get('Accept', '').lower()
-        )
+        # Detect Flutter
+        is_api = request.form.get('uid') is not None or 'application/json' in request.headers.get('Accept', '').lower()
 
         if 'file' not in request.files:
             return jsonify({'error': 'No file uploaded'}), 400
@@ -188,52 +148,49 @@ def handle_root():
         file_path = os.path.join(uploads_dir, file.filename)
         file.save(file_path)
 
+        # MEMORY OPTIMIZATION: Shrink huge mobile photos to save RAM and prevent 502 error
+        try:
+            with Image.open(file_path) as img:
+                img.thumbnail((800, 800))
+                img.save(file_path, "JPEG", quality=85)
+        except Exception as e:
+            logging.error(f"Image resize error: {e}")
+
         try:
             label, confidence = predict_skin_disease(file_path)
             details = DISEASE_DETAILS.get(label, {})
 
-            # Save history if UID provided
+            # Save to history if UID present
             user_id = request.form.get('uid')
-            image_url = request.form.get('image_url')
             if db and user_id and label not in ["Invalid Image (Not Skin)", "Uncertain Prediction"]:
                 try:
                     db.collection('user').document(user_id).collection('scan_history').add({
-                        'disease_name': label,
-                        'confidence': int(confidence),
-                        'image_url': image_url or '',
+                        'disease_name': label, 'confidence': int(confidence),
+                        'image_url': request.form.get('image_url') or '',
                         'timestamp': firestore.SERVER_TIMESTAMP
                     })
-                except Exception as fe:
-                    logging.error(f"Firestore save error: {fe}")
+                except: pass
 
-            if is_api_request:
-                return jsonify({
-                    'prediction': label,
-                    'confidence': confidence,
-                    'details': details,
-                    'status': 'success'
-                })
+            if is_api:
+                return jsonify({'prediction': label, 'confidence': confidence, 'details': details, 'status': 'success'})
             else:
                 return render_template('result.html', prediction=label, confidence=f"{confidence:.2f}%")
-
         except Exception as e:
             logging.error(str(e))
-            if is_api_request:
-                return jsonify({'error': str(e)}), 500
-            return f"Error: {str(e)}", 500
+            if is_api: return jsonify({'error': str(e)}), 500
+            return f"Error: {e}", 500
 
     return render_template('upload.html')
 
-# Maintain /predict as an alias for the same logic
 @app.route('/predict', methods=['POST', 'OPTIONS'])
 def predict_alias():
     return handle_root()
 
 @app.route('/health', methods=['GET'])
-def health_check():
+def health():
     return jsonify({'status': 'healthy'}), 200
 
 if __name__ == '__main__':
     uploads_dir = os.path.join(BASE_DIR, 'uploads')
     os.makedirs(uploads_dir, exist_ok=True)
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000)
