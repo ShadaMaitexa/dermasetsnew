@@ -20,10 +20,16 @@ except ImportError:
     FIREBASE_AVAILABLE = False
 
 
+from flask_cors import CORS
+
 # Base directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 app = Flask(__name__)
+CORS(app) # Enable CORS for Flutter integration
+
+# Configure logging at top level for Gunicorn
+logging.basicConfig(level=logging.INFO)
 
 
 # ================================
@@ -280,7 +286,7 @@ def predict_skin_disease(image_path):
 # ================================
 @app.route('/predict', methods=['POST'])
 def predict_api():
-
+    logging.info("Prediction request received")
     if 'file' not in request.files:
         return jsonify({'error': 'No file uploaded'}), 400
 
@@ -333,6 +339,11 @@ def predict_api():
         logging.error(str(e))
 
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    return jsonify({'status': 'healthy'}), 200
 
 
 # ================================
